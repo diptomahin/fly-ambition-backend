@@ -91,6 +91,30 @@ async function run() {
           .json({ success: false, error: "Failed to fetch testimonials" });
       }
     });
+app.get("/api/testimonials/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate and convert id
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, error: "Invalid ID format" });
+    }
+
+    const objectId = new ObjectId(id);
+
+    // Find testimonial
+    const testimonial = await testimonialCollection.findOne({ _id: objectId });
+
+    if (!testimonial) {
+      return res.status(404).json({ success: false, error: "Testimonial not found" });
+    }
+
+    res.json({ success: true, data: testimonial });
+  } catch (err) {
+    console.error("Fetch single testimonial error:", err);
+    res.status(500).json({ success: false, error: "Failed to fetch testimonial" });
+  }
+});
 
 app.put(
   "/api/testimonials/:id",
@@ -98,29 +122,35 @@ app.put(
   async (req, res) => {
     try {
       const { id } = req.params;
-      const { author, role, country, text } = req.body;
+      const { author, role, country, text, type } = req.body; // include type
       const image = req.file ? req.file.path : null;
 
-      // Convert id to ObjectId
       const objectId = new ObjectId(id);
 
       // Find existing testimonial
       const testimonial = await testimonialCollection.findOne({ _id: objectId });
       if (!testimonial) {
-        return res.status(404).json({ success: false, error: "Testimonial not found" });
+        return res
+          .status(404)
+          .json({ success: false, error: "Testimonial not found" });
       }
 
       // Remove old image if a new one is uploaded
       if (image && testimonial.image) {
-        const oldImagePath = path.join(__dirname, testimonial.image);
-        fs.unlink(oldImagePath, (err) => {
-          if (err) console.log("Old image deletion error:", err);
-        });
+        try {
+          const oldImagePath = path.resolve(testimonial.image);
+          fs.unlink(oldImagePath, (err) => {
+            if (err) console.log("Old image deletion error:", err);
+          });
+        } catch (err) {
+          console.log("Image delete path error:", err);
+        }
       }
 
       // Prepare updated data
       const updatedTestimonial = {
         author: author || testimonial.author,
+        type: type || testimonial.type || "Employment", // preserve or default
         role: role || testimonial.role,
         country: country || testimonial.country,
         text: text || testimonial.text,
@@ -136,15 +166,18 @@ app.put(
 
       res.json({
         success: true,
-        message: "Testimonial updated!",
+        message: "Testimonial updated successfully!",
         testimonial: updatedTestimonial,
       });
     } catch (err) {
       console.error("Update error:", err);
-      res.status(500).json({ success: false, error: "Failed to update testimonial" });
+      res
+        .status(500)
+        .json({ success: false, error: "Failed to update testimonial" });
     }
   }
 );
+
 app.delete("/api/testimonials/:id", async (req, res) => {
   try {
     const { id } = req.params;
